@@ -132,8 +132,13 @@ def download(url, output_path, dry_run=True):
         file_size = 0
 
     remote_file_size = response.headers.get('Content-length', 0)
+    try:
+        remote_file_size = int(remote_file_size)
+    except ValueError:
+        remote_file_size = 0
 
-    if abs(remote_file_size - file_size) > 0.2 * file_size and file_size != 0):
+    if (abs(remote_file_size - file_size) > 0.2 * file_size) and file_size != 0:
+        print('File sizes differ: ', remote_file_size, file_size)
         try:
             print("Removing file: ", output_file_path)
             os.remove(output_file_path)
@@ -143,10 +148,13 @@ def download(url, output_path, dry_run=True):
     if not dry_run:
         if remote_file_size:
             os.makedirs(output_path, exist_ok=True)
+            loaded = 0
             with open(output_file_path, "wb") as handle:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
                     if chunk:
                         handle.write(chunk)
+                    loaded += 1024 * 1024
+                    print("Loaded: ", loaded)
             print("Downloaded file: ", output_file_path)
     else:
         print("Downloading file: %s, size=%s" % (url, remote_file_size))
@@ -166,6 +174,7 @@ def main():
                                     item['intermediate_url'].format(**vars),
                                     item['file_template'].format(**vars),
                                     )
+            print("Starting download: ", url_full)
             download(url_full, output_folder, dry_run=False)
             total += 1
     print("Total number of files: ", total)
