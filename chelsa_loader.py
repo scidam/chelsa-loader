@@ -2,9 +2,16 @@ import os
 import requests
 import itertools
 import re
+from tqdm import tqdm
 
+# Where from the data is grabbed
 BASE_URL  = "https://www.wsl.ch/lud/chelsa/data/"
+
+# Template where to save data
 OUTPUT_FOLDER_TEMPLATE = r'/home/dmitry/bin/chelsa/{folder_name}/{model}/{year}/{emission}/'
+
+# buffer size in bytes
+BUFFER_SIZE = 1024 * 1024
 
 SCHEME = {
     "CURRENT_mean_temp": {
@@ -29,7 +36,6 @@ SCHEME = {
                             'intermediate_url': 'climatologies/prec/',
 
                          },
-
 
     # LGM loader
 
@@ -105,6 +111,8 @@ SCHEME = {
 
 
 def cartesian_helper(dct):
+    """ Cartesian product applyied to  a dictionary """
+
     keys = dct.keys()
     vals = dct.values()
     for instance in itertools.product(*vals):
@@ -112,6 +120,8 @@ def cartesian_helper(dct):
 
 
 def get_output_folder(**kwargs):
+    """ Form output path using template  """
+
     template = OUTPUT_FOLDER_TEMPLATE
     to_render = dict()
     for kw in re.findall(r'\{([a-zA-Z_]+)\}', template):
@@ -123,6 +133,7 @@ def get_output_folder(**kwargs):
 
 
 def download(url, output_path, dry_run=True):
+    """ Download and save files according to above configurations """
     filename = url.split('/')[-1]
     response = requests.get(url, stream=True)
     output_file_path = os.path.join(output_path, filename)
@@ -144,20 +155,28 @@ def download(url, output_path, dry_run=True):
             os.remove(output_file_path)
         except (OSError, IOError):
             pass
+    elif file_size == 0:
+        print("The file wasn't downloaded: ", url)
+    else:
+        print("Files don't  differ: ", remote_file_size, file_size)
+        print("The file is already downloaded: ", output_file_path)
+        return
 
     if not dry_run:
         if remote_file_size:
             os.makedirs(output_path, exist_ok=True)
             loaded = 0
-            with open(output_file_path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        handle.write(chunk)
-                    loaded += 1024 * 1024
-                    print("Loaded: ", loaded)
-            print("Downloaded file: ", output_file_path)
+            print("Downloading started: ", url)
+            with tqdm(total=remote_file_size) as pbar:
+                with open(output_file_path, "wb") as handle:
+                    for chunk in response.iter_content(chunk_size=BUFFER_SIZE):
+                        if chunk:
+                            handle.write(chunk)
+                        loaded += BUFFER_SIZE
+                        pbar.update(loaded)
+            print("The file was downloaded: ", output_file_path)
     else:
-        print("Downloading file: %s, size=%s" % (url, remote_file_size))
+        print("Fake loading file: %s, size=%s" % (url, remote_file_size))
 
 
 def main():
